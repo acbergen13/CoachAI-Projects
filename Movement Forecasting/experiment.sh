@@ -1,5 +1,5 @@
 #!/bin/bash
-declare -a model_list=("LSTM" "ShuttleNet" "Transformer" "rGCN" "DNRI" "GCN" "eGCN" "DyMF")
+declare -a model_list=("DyMF")
 declare -a seeds=("1")
 declare -a seqence_length=("2" "4" "8")
 for model in "${model_list[@]}";

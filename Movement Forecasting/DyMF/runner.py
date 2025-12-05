@@ -10,30 +10,67 @@ PAD = 0
 def Gaussian2D_loss(V_pred, V_trgt):
     #mux, muy, sx, sy, corr
     #assert V_pred.shape == V_trgt.shape
+    
+    # Check for NaN or Inf in inputs
+    if torch.isnan(V_pred).any() or torch.isinf(V_pred).any():
+        print("Warning: NaN or Inf detected in V_pred")
+        return torch.tensor(1e6, device=V_pred.device, requires_grad=True)
+    
+    if torch.isnan(V_trgt).any() or torch.isinf(V_trgt).any():
+        print("Warning: NaN or Inf detected in V_trgt")
+        return torch.tensor(1e6, device=V_pred.device, requires_grad=True)
+    
     normx = V_trgt[:, 0] - V_pred[:, 0]
     normy = V_trgt[:, 1] - V_pred[:, 1]
 
-    sx = torch.exp(V_pred[:, 2]) #sx
-    sy = torch.exp(V_pred[:, 3]) #sy
-    corr = torch.tanh(V_pred[:, 4]) #corr
+    # Clamp V_pred[:, 2] and V_pred[:, 3] to prevent overflow in exp
+    # Limit to reasonable range: -10 to 10 (exp(-10) ≈ 4.5e-5, exp(10) ≈ 22026)
+    log_sx = torch.clamp(V_pred[:, 2], min=-10, max=10)
+    log_sy = torch.clamp(V_pred[:, 3], min=-10, max=10)
+    
+    sx = torch.exp(log_sx)  # sx
+    sy = torch.exp(log_sy)  # sy
+    corr = torch.tanh(V_pred[:, 4])  # corr
+    
+    # Ensure sx and sy are not too small (minimum variance)
+    min_std = 1e-4
+    sx = torch.clamp(sx, min=min_std)
+    sy = torch.clamp(sy, min=min_std)
     
     sxsy = sx * sy
 
+    # Avoid division by zero
     z = (normx/sx)**2 + (normy/sy)**2 - 2*((corr*normx*normy)/sxsy)
     negRho = 1 - corr**2
+    
+    # Ensure negRho is positive and not too small
+    negRho = torch.clamp(negRho, min=1e-6)
+
+    # Clamp z to prevent overflow in exp
+    z = torch.clamp(z, max=100)
 
     # Numerator
     result = torch.exp(-z/(2*negRho))
-    # Normalization factor
-    denom = 2 * np.pi * (sxsy * torch.sqrt(negRho))
+    
+    # Normalization factor - ensure denominator is not too small
+    sqrt_negRho = torch.sqrt(negRho)
+    denom = 2 * np.pi * (sxsy * sqrt_negRho)
+    denom = torch.clamp(denom, min=1e-10)
 
     # Final PDF calculation
     result = result / denom
 
-    # Numerical stability
+    # Numerical stability - clamp result before log
     epsilon = 1e-20
+    result = torch.clamp(result, min=epsilon, max=1e10)
 
-    result = -torch.log(torch.clamp(result, min=epsilon))
+    result = -torch.log(result)
+    
+    # Check for NaN in result
+    if torch.isnan(result).any():
+        print("Warning: NaN detected in loss calculation")
+        result = torch.where(torch.isnan(result), torch.tensor(1e6, device=result.device), result)
+    
     result = torch.sum(result)
     
     return result
@@ -124,15 +161,38 @@ def train(train_dataloader, valid_dataloader, encoder, decoder, location_criteri
             loss_type = shot_type_criterion(predict_shot_type_logit, target_type)
             loss_location = (Gaussian2D_loss(predict_A_xy, gold_A_xy) + Gaussian2D_loss(predict_B_xy, gold_B_xy)) / 2
             loss = loss_location + loss_type
-            loss.backward()            
+            
+            # Check for NaN before backward pass
+            if torch.isnan(loss) or torch.isinf(loss):
+                print(f"Warning: NaN/Inf loss detected at epoch {epoch+1}, skipping this batch")
+                encoder_optimizer.zero_grad()
+                decoder_optimizer.zero_grad()
+                continue
+            
+            loss.backward()
+            
+            # Gradient clipping to prevent explosion
+            torch.nn.utils.clip_grad_norm_(encoder.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(decoder.parameters(), max_norm=1.0)
+            
             encoder_optimizer.step()
             decoder_optimizer.step()
 
         # evaluate_loss, loss_location, loss_type = evaluate(valid_dataloader, encoder, decoder, location_criterion, shot_type_criterion, args, device=device)
-        if loss < best_loss:
-            best_loss = loss
-            best_loss_location = loss_location
-            best_loss_type = loss_type
+        # Convert tensors to Python floats for comparison and return
+        loss_value = loss.item() if isinstance(loss, torch.Tensor) else loss
+        loss_location_value = loss_location.item() if isinstance(loss_location, torch.Tensor) else loss_location
+        loss_type_value = loss_type.item() if isinstance(loss_type, torch.Tensor) else loss_type
+        
+        if loss_value < best_loss:
+            best_loss = loss_value
+            best_loss_location = loss_location_value
+            best_loss_type = loss_type_value
+        
+        # Print loss every 10 epochs for monitoring
+        if (epoch + 1) % 10 == 0:
+            print(f"Epoch {epoch+1}/{args['epochs']}: Loss={loss_value:.2f}, Location={loss_location_value:.2f}, Type={loss_type_value:.2f}")
+        
         # if evaluate_loss < best_loss:
         #     best_loss = evaluate_loss
         #     best_loss_location = loss_location

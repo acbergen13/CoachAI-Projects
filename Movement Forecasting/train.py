@@ -72,7 +72,8 @@ torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
 
 if args['model_folder'] == None:
-    args['model_folder'] = './model/' +  args['model_type'] + '_' + str(args['encode_length']) + '_' + str(datetime.now().strftime("%Y-%m-%d-%H:%M:%S"))
+    # Use Windows-compatible timestamp format (replace colons with hyphens)
+    args['model_folder'] = './model/' +  args['model_type'] + '_' + str(args['encode_length']) + '_' + str(datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
 
 train_dataloader, valid_dataloader, test_dataloader, args = prepare_dataset(args)
 

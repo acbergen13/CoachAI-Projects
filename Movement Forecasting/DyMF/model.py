@@ -39,12 +39,25 @@ def initialize_adjacency_matrix(batch_size, encode_length, shot_type):
     adjacency_matrix = torch.tile(adjacency_matrix, (batch_size, 1, 1, 1))
     for batch in range(batch_size):
         for step in range(len(shot_type[batch])):
-            if step % 2 == 0:
-                adjacency_matrix[batch][shot_type[batch][step]][step * 2][(step + 1) * 2 + 1] = 1
-                adjacency_matrix[batch][shot_type[batch][step]][(step + 1) * 2 + 1][step * 2] = 1
-            if step % 2 == 1:
-                adjacency_matrix[batch][shot_type[batch][step]][(step * 2) + 1][(step + 1) * 2] = 1
-                adjacency_matrix[batch][shot_type[batch][step]][(step + 1) * 2][(step * 2) + 1] = 1
+            # Skip padding (0 values)
+            shot_type_val = shot_type[batch][step].item()
+            if shot_type_val == 0:
+                continue
+            
+            # Clamp shot_type to valid range [0, 10] for adjacency matrix indexing
+            # Indices 11-12 are reserved for special player alternation relations
+            # Shot types are 1-indexed (1, 2, 3, ...), but adjacency matrix uses 0-10 for shot types
+            # Convert from 1-indexed to 0-indexed and clamp to [0, 10]
+            shot_type_idx = max(0, min(shot_type_val - 1, 10))
+            
+            # Only set adjacency if we're not at the last step
+            if step + 1 < len(shot_type[batch]):
+                if step % 2 == 0:
+                    adjacency_matrix[batch][shot_type_idx][step * 2][(step + 1) * 2 + 1] = 1
+                    adjacency_matrix[batch][shot_type_idx][(step + 1) * 2 + 1][step * 2] = 1
+                if step % 2 == 1:
+                    adjacency_matrix[batch][shot_type_idx][(step * 2) + 1][(step + 1) * 2] = 1
+                    adjacency_matrix[batch][shot_type_idx][(step + 1) * 2][(step * 2) + 1] = 1
 
     return adjacency_matrix
 
@@ -280,16 +293,22 @@ class relational_GCN_layer(nn.Module):
     def __init__(self, hidden_size, type_num, num_basis, device):
         super(relational_GCN_layer, self).__init__()
         # relation index should minus 1, because padding 0
+        # The adjacency matrix has 13 relation types (0-12): 11 shot types (0-10) + 2 special (11-12)
+        # After slicing [:, 1:, :, :], we use 12 relation types (1-12)
+        # So we need 12 relation types: 11 shot types (1-10, but we use 0-10) + 2 special (11-12)
+        # Fixed to 11 shot types + 2 special = 13 total, but after -1 (skip padding) = 12
         self.num_basis = num_basis
         self.hidden_size = hidden_size
         self.device = device
         self.type_num = type_num
+        # Fixed number of relation types: 11 shot types + 2 special = 13, but we skip padding so 12
+        self.num_relation_types = 12  # Fixed: 11 shot types (0-10) + 2 special (11-12), skip padding (0)
         self.self_linear = nn.Linear(hidden_size, hidden_size, bias=False)
         # self.normalization_constant = torch.nn.Parameter(torch.Tensor(1, type_num - 1 + 3))
 
         self.basis_matrix = torch.nn.Parameter(torch.Tensor(num_basis, hidden_size, hidden_size))
         # self.bias = torch.nn.Parameter(torch.Tensor(type_num + 3, hidden_size)).to(device)
-        self.linear_combination = torch.nn.Parameter(torch.Tensor(type_num - 1 + 2, num_basis))
+        self.linear_combination = torch.nn.Parameter(torch.Tensor(self.num_relation_types, num_basis))
         self.dropout = nn.Dropout(0.1)
         nn.init.xavier_uniform_(self.basis_matrix, gain=nn.init.calculate_gain('relu'))
         # nn.init.xavier_uniform_(self.bias, gain=nn.init.calculate_gain('relu'))
@@ -297,7 +316,7 @@ class relational_GCN_layer(nn.Module):
         # nn.init.xavier_uniform_(self.normalization_constant, gain=nn.init.calculate_gain('relu'))
         
     def forward(self, node_embedding, adjacency_matrix, activation_function):
-        mutil_relational_weight = torch.matmul(self.linear_combination, self.basis_matrix.view(self.num_basis, -1)).view(self.type_num - 1 + 2, self.hidden_size, self.hidden_size)
+        mutil_relational_weight = torch.matmul(self.linear_combination, self.basis_matrix.view(self.num_basis, -1)).view(self.num_relation_types, self.hidden_size, self.hidden_size)
 
         adjacency_matrix = adjacency_matrix[:, 1:, :, :]
         connected_node_embedding = torch.matmul(adjacency_matrix.float(), node_embedding.unsqueeze(1))
@@ -559,24 +578,38 @@ class Decoder(nn.Module):
         adjacency_matrix = update_adjacency_matrix(batch_size, step, adjacency_matrix)
         if train:
             for batch in range(batch_size):
+                # Clamp shot_type to valid range [0, 10] for adjacency matrix indexing
+                shot_type_val = shot_type[batch][0].item()
+                if shot_type_val > 0:
+                    shot_type_idx = max(0, min(shot_type_val - 1, 10))  # Convert 1-indexed to 0-indexed, clamp to [0, 10]
+                else:
+                    shot_type_idx = 0
+                
                 if step % 2 == 0:
-                    adjacency_matrix[batch][shot_type[batch][0]][(step - 2) * 2][(step - 1) * 2 + 1] = 1
-                    adjacency_matrix[batch][shot_type[batch][0]][(step - 1) * 2 + 1][(step - 2) * 2] = 1
+                    adjacency_matrix[batch][shot_type_idx][(step - 2) * 2][(step - 1) * 2 + 1] = 1
+                    adjacency_matrix[batch][shot_type_idx][(step - 1) * 2 + 1][(step - 2) * 2] = 1
                 if step % 2 == 1:
-                    adjacency_matrix[batch][shot_type[batch][0]][(step - 1) * 2][(step - 2) * 2 + 1] = 1
-                    adjacency_matrix[batch][shot_type[batch][0]][(step - 2) * 2 + 1][(step - 1) * 2] = 1
+                    adjacency_matrix[batch][shot_type_idx][(step - 1) * 2][(step - 2) * 2 + 1] = 1
+                    adjacency_matrix[batch][shot_type_idx][(step - 2) * 2 + 1][(step - 1) * 2] = 1
         else:
             weights = predict_shot_type_logit[0, 1:]
             weights = F.softmax(weights, dim=0)
             predict_shot_type = torch.multinomial(weights, 1).unsqueeze(0) + 1
 
             for batch in range(batch_size):
+                # Clamp predicted shot_type to valid range [0, 10] for adjacency matrix indexing
+                predict_shot_type_val = predict_shot_type[batch][0].item()
+                if predict_shot_type_val > 0:
+                    predict_shot_type_idx = max(0, min(predict_shot_type_val - 1, 10))  # Convert 1-indexed to 0-indexed, clamp to [0, 10]
+                else:
+                    predict_shot_type_idx = 0
+                
                 if step % 2 == 0:
-                    adjacency_matrix[batch][predict_shot_type[batch][0]][(step - 2) * 2][(step - 1) * 2 + 1] = 1
-                    adjacency_matrix[batch][predict_shot_type[batch][0]][(step - 1) * 2 + 1][(step - 2) * 2] = 1
+                    adjacency_matrix[batch][predict_shot_type_idx][(step - 2) * 2][(step - 1) * 2 + 1] = 1
+                    adjacency_matrix[batch][predict_shot_type_idx][(step - 1) * 2 + 1][(step - 2) * 2] = 1
                 if step % 2 == 1:
-                    adjacency_matrix[batch][predict_shot_type[batch][0]][(step - 1) * 2][(step - 2) * 2 + 1] = 1
-                    adjacency_matrix[batch][predict_shot_type[batch][0]][(step - 2) * 2 + 1][(step - 1) * 2] = 1
+                    adjacency_matrix[batch][predict_shot_type_idx][(step - 1) * 2][(step - 2) * 2 + 1] = 1
+                    adjacency_matrix[batch][predict_shot_type_idx][(step - 2) * 2 + 1][(step - 1) * 2] = 1
 
         player_A_embedding = model_input[:, 0::2, :].clone()
         player_B_embedding = model_input[:, 1::2, :].clone()

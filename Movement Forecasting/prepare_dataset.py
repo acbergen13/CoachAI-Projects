@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import pandas as pd
 import random
+import sys
 from data_cleaner import DataCleaner
 from dataset import BadmintonDataset
 
@@ -51,8 +52,11 @@ def prepare_dataset(args):
     g = torch.Generator()
     g.manual_seed(0)
 
-    train_dataloader = DataLoader(train_dataset, batch_size=args['train_batch_size'], shuffle=True, num_workers=8)
-    valid_dataloader = DataLoader(valid_dataset, batch_size=args['valid_batch_size'], shuffle=False, num_workers=8)
-    test_dataloader = DataLoader(test_dataset, batch_size=args['test_batch_size'], shuffle=False, num_workers=8)
+    # Set num_workers=0 for Windows compatibility (multiprocessing issues on Windows)
+    # On Linux/Mac, you can change this to a positive number (e.g., 4 or 8) for faster data loading
+    num_workers = 0 if sys.platform == 'win32' else args.get('num_workers', 0)
+    train_dataloader = DataLoader(train_dataset, batch_size=args['train_batch_size'], shuffle=True, num_workers=num_workers)
+    valid_dataloader = DataLoader(valid_dataset, batch_size=args['valid_batch_size'], shuffle=False, num_workers=num_workers)
+    test_dataloader = DataLoader(test_dataset, batch_size=args['test_batch_size'], shuffle=False, num_workers=num_workers)
     return train_dataloader, valid_dataloader, test_dataloader, args
     

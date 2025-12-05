@@ -1,0 +1,4 @@
+,location_MAE,location_MAE,location_MAE,location_MAE,location_MSE,location_MSE,location_MSE,location_MSE,type_loss,type_loss,type_loss,type_loss,total_loss,total_loss,total_loss,total_loss
+,mean,std,min,max,mean,std,min,max,mean,std,min,max,mean,std,min,max
+encode_length,,,,,,,,,,,,,,,,
+2,14.132,0.1061,14.0569,14.207,78.5003,0.6969,78.0075,78.9931,2.8466,0.0337,2.8228,2.8705,95.4788,0.8369,94.8871,96.0706
