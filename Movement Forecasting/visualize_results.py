@@ -4,6 +4,7 @@ Generates publication-ready figures for research posters.
 """
 
 import torch
+import torch.distributions as torchdist
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -346,6 +347,73 @@ def create_shot_type_analysis(model_folder, save_path='shot_type_analysis.png'):
     print(f"Saved shot type analysis to: {save_path}")
     plt.close()
 
+def visualize_court_distribution(model_folder, save_path, observed_shots, predicted_shots, player_positions):
+    """
+    Creates a more readable and user-friendly court visualization with heatmaps.
+    """
+    fig, axs = plt.subplots(2, 1, figsize=(8, 10))
+    fig.patch.set_facecolor('white')
+    
+    scenarios = [
+        {'title': 'Original Defense Location', 'desc': "Observed:\n1: shot service\n2: net shot\n3: lob\n\nPredicted:\n4: net shot", 'pred_text': "4: net shot"},
+        {'title': 'Modified Defense Location', 'desc': "Observed:\n1: shot service\n2: net shot\n3: lob\n\nPredicted:\n4: clear", 'pred_text': "4: clear"}
+    ]
+
+    for i, ax in enumerate(axs.flatten()):
+        # Use the proper court drawing function
+        draw_badminton_court(ax)
+        ax.set_title(scenarios[i]['title'], fontsize=16, fontweight='bold', pad=20)
+
+        # --- Plot Player Position Heatmaps using Gaussian ---
+        p_a_x, p_a_y = player_positions[i][0]
+        p_b_x, p_b_y = player_positions[i][1]
+        
+        court_width, court_length = 710, 1340
+        x = np.linspace(0, court_width, 100)
+        y = np.linspace(0, court_length, 100)
+        X, Y = np.meshgrid(x, y)
+        
+        # Player A Distribution
+        mean_a_x, mean_a_y = p_a_x * court_width/10, p_a_y * court_length/6
+        sigma_a = 80
+        Z_a = np.exp(-((X - mean_a_x)**2 + (Y - mean_a_y)**2) / (2 * sigma_a**2))
+        
+        # Player B Distribution
+        mean_b_x, mean_b_y = p_b_x * court_width/10, p_b_y * court_length/6
+        sigma_b = 80
+        Z_b = np.exp(-((X - mean_b_x)**2 + (Y - mean_b_y)**2) / (2 * sigma_b**2))
+
+        # Plot contours
+        ax.contourf(X, Y, Z_a, levels=10, cmap='Reds', alpha=0.6)
+        ax.contourf(X, Y, Z_b, levels=10, cmap='Blues', alpha=0.6)
+        
+        # Mark player positions
+        ax.plot(mean_a_x, mean_a_y, 'r*', markersize=20, markeredgecolor='darkred', markeredgewidth=2, label='Player A next move')
+        ax.plot(mean_b_x, mean_b_y, 'b*', markersize=20, markeredgecolor='darkblue', markeredgewidth=2, label='Player B next move')
+
+        # --- Plot Shot Annotations ---
+        # Observed shots
+        for x_shot, y_shot, label in observed_shots[i]:
+            shot_x, shot_y = x_shot * court_width/10, y_shot * court_length/6
+            ax.plot(shot_x, shot_y, 'o', markersize=12, markerfacecolor='cyan', markeredgecolor='black', mew=2)
+            ax.text(shot_x, shot_y + 30, label, color='black', ha='center', fontsize=11, fontweight='bold')
+        
+        # Predicted shot
+        if predicted_shots[i]:
+            pred_x, pred_y, pred_label = predicted_shots[i][0]
+            shot_px, shot_py = pred_x * court_width/10, pred_y * court_length/6
+            ax.plot(shot_px, shot_py, 's', markersize=12, markerfacecolor='lime', markeredgecolor='black', mew=2)
+            ax.text(shot_px, shot_py + 30, pred_label, color='darkgreen', ha='center', fontsize=11, fontweight='bold')
+
+        # --- Add Text Box for Shot Types ---
+        props = dict(boxstyle='round', facecolor='white', alpha=0.9, edgecolor='black', linewidth=2)
+        ax.text(20, court_length - 50, scenarios[i]['desc'], fontsize=9, verticalalignment='top', bbox=props)
+        ax.text(court_width - 120, court_length - 50, f"Predicted:\n{scenarios[i]['pred_text']}", fontsize=9, color='darkgreen', verticalalignment='top', bbox=props, fontweight='bold')
+
+    plt.tight_layout(pad=3.0)
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    print(f"Saved enhanced court visualization to: {save_path}")
+    plt.close(fig)
 def main():
     if len(sys.argv) < 2:
         print("Usage: python visualize_results.py <model_folder> [num_rallies]")

@@ -72,6 +72,27 @@ def main():
             vis.create_shot_type_analysis(model_folder, save_path=os.path.join(model_out, 'shot_type_analysis.png'))
             # Performance comparison for single model (will use placeholders if needed)
             vis.create_performance_comparison([model_folder], save_path=os.path.join(model_out, 'performance_comparison.png'))
+
+            # Court-style visualization (using sample data for demonstration)
+            observed_shots = [
+                [(8.5, 3.5, '1'), (8.2, 2.8, '2'), (8.8, 3.2, '3'), (2.5, 3.5, '4')],
+                [(7.5, 2.5, '1'), (7.2, 2.8, '2'), (7.8, 2.2, '3'), (3.5, 4.5, '4')]
+            ]
+            predicted_shots = [
+                [(8.5, 3.5, '4')],
+                [(7.5, 2.5, '4')]
+            ]
+            player_positions = [
+                [(8, 3), (2, 3)],
+                [(7, 2), (3, 4)]
+            ]
+            vis.visualize_court_distribution(
+                model_folder,
+                save_path=os.path.join(model_out, 'court_distribution.png'),
+                observed_shots=observed_shots,
+                predicted_shots=predicted_shots,
+                player_positions=player_positions
+            )
         except Exception as e:
             print(f"  ✗ Error generating visualizations for {model_name}: {e}")
             continue

@@ -104,10 +104,9 @@ def create_comprehensive_comparison(df, save_dir='visualizations'):
         print("No results to visualize!")
         return
     
-    # 1. Performance Metrics Comparison
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    # Performance by Encode Length Only
+    fig, ax = plt.subplots(figsize=(12, 6))
     
-    # Encode length comparison
     if 'encode_length' in df.columns:
         encode_groups = df.groupby('encode_length').agg({
             'location_MAE': 'mean',
@@ -119,53 +118,26 @@ def create_comprehensive_comparison(df, save_dir='visualizations'):
         x_pos = np.arange(len(encode_groups))
         width = 0.2
         
-        axes[0, 0].bar(x_pos - 1.5*width, encode_groups['location_MAE'], width, 
+        ax.bar(x_pos - 1.5*width, encode_groups['location_MAE'], width, 
                       label='Location MAE', color='steelblue', alpha=0.8)
-        axes[0, 0].bar(x_pos - 0.5*width, encode_groups['location_MSE']/10, width,
+        ax.bar(x_pos - 0.5*width, encode_groups['location_MSE']/10, width,
                       label='Location MSE/10', color='coral', alpha=0.8)
-        axes[0, 0].bar(x_pos + 0.5*width, encode_groups['type_loss'], width,
+        ax.bar(x_pos + 0.5*width, encode_groups['type_loss'], width,
                       label='Type Loss', color='mediumseagreen', alpha=0.8)
-        axes[0, 0].bar(x_pos + 1.5*width, encode_groups['total_loss']/100, width,
+        ax.bar(x_pos + 1.5*width, encode_groups['total_loss']/100, width,
                       label='Total Loss/100', color='purple', alpha=0.8)
         
-        axes[0, 0].set_xlabel('Encode Length', fontsize=12, fontweight='bold')
-        axes[0, 0].set_ylabel('Metric Value', fontsize=12, fontweight='bold')
-        axes[0, 0].set_title('Performance by Encode Length', fontsize=14, fontweight='bold')
-        axes[0, 0].set_xticks(x_pos)
-        axes[0, 0].set_xticklabels(encode_groups['encode_length'])
-        axes[0, 0].legend()
-        axes[0, 0].grid(axis='y', alpha=0.3)
-    
-    # Location MAE comparison
-    if 'encode_length' in df.columns:
-        sns.boxplot(data=df, x='encode_length', y='location_MAE', ax=axes[0, 1])
-        axes[0, 1].set_xlabel('Encode Length', fontsize=12, fontweight='bold')
-        axes[0, 1].set_ylabel('Location MAE', fontsize=12, fontweight='bold')
-        axes[0, 1].set_title('Location Prediction Error Distribution', fontsize=14, fontweight='bold')
-        axes[0, 1].grid(axis='y', alpha=0.3)
-    
-    # Type Loss comparison
-    if 'encode_length' in df.columns:
-        sns.boxplot(data=df, x='encode_length', y='type_loss', ax=axes[1, 0])
-        axes[1, 0].set_xlabel('Encode Length', fontsize=12, fontweight='bold')
-        axes[1, 0].set_ylabel('Shot Type Loss', fontsize=12, fontweight='bold')
-        axes[1, 0].set_title('Shot Type Prediction Error Distribution', fontsize=14, fontweight='bold')
-        axes[1, 0].grid(axis='y', alpha=0.3)
-    
-    # Scatter: Location MAE vs Type Loss
-    scatter = axes[1, 1].scatter(df['location_MAE'], df['type_loss'], 
-                                c=df['encode_length'] if 'encode_length' in df.columns else range(len(df)),
-                                s=100, alpha=0.6, cmap='viridis')
-    axes[1, 1].set_xlabel('Location MAE', fontsize=12, fontweight='bold')
-    axes[1, 1].set_ylabel('Shot Type Loss', fontsize=12, fontweight='bold')
-    axes[1, 1].set_title('Location vs Shot Type Performance', fontsize=14, fontweight='bold')
-    axes[1, 1].grid(alpha=0.3)
-    if 'encode_length' in df.columns:
-        plt.colorbar(scatter, ax=axes[1, 1], label='Encode Length')
+        ax.set_xlabel('Encode Length', fontsize=12, fontweight='bold')
+        ax.set_ylabel('Metric Value', fontsize=12, fontweight='bold')
+        ax.set_title('Performance by Encode Length', fontsize=14, fontweight='bold')
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(encode_groups['encode_length'])
+        ax.legend()
+        ax.grid(axis='y', alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, 'comprehensive_comparison.png'), dpi=300, bbox_inches='tight')
-    print(f"Saved comprehensive comparison to: {os.path.join(save_dir, 'comprehensive_comparison.png')}")
+    plt.savefig(os.path.join(save_dir, 'performance_by_encode_length.png'), dpi=300, bbox_inches='tight')
+    print(f"Saved performance by encode length to: {os.path.join(save_dir, 'performance_by_encode_length.png')}")
     plt.close()
 
 def create_performance_table(df, save_dir='visualizations'):
@@ -201,8 +173,7 @@ def create_performance_table(df, save_dir='visualizations'):
             f"{subset['location_MAE'].mean():.2f} ± {subset['location_MAE'].std():.2f}",
             f"{subset['location_MSE'].mean():.2f} ± {subset['location_MSE'].std():.2f}",
             f"{subset['type_loss'].mean():.2f} ± {subset['type_loss'].std():.2f}",
-            f"{subset['total_loss'].mean():.2f} ± {subset['total_loss'].std():.2f}",
-            len(subset)
+            f"{subset['total_loss'].mean():.2f} ± {subset['total_loss'].std():.2f}"
         ])
     
     # Overall statistics
@@ -211,23 +182,22 @@ def create_performance_table(df, save_dir='visualizations'):
         f"{df['location_MAE'].mean():.2f} ± {df['location_MAE'].std():.2f}",
         f"{df['location_MSE'].mean():.2f} ± {df['location_MSE'].std():.2f}",
         f"{df['type_loss'].mean():.2f} ± {df['type_loss'].std():.2f}",
-        f"{df['total_loss'].mean():.2f} ± {df['total_loss'].std():.2f}",
-        len(df)
+        f"{df['total_loss'].mean():.2f} ± {df['total_loss'].std():.2f}"
     ])
     
     table = ax.table(cellText=table_data,
                     colLabels=['Configuration', 'Location MAE', 'Location MSE', 
-                              'Type Loss', 'Total Loss', 'N'],
+                              'Type Loss', 'Total Loss'],
                     cellLoc='center',
                     loc='center',
-                    colWidths=[0.15, 0.17, 0.17, 0.17, 0.17, 0.15])
+                    colWidths=[0.18, 0.20, 0.20, 0.20, 0.20])
     
     table.auto_set_font_size(False)
     table.set_fontsize(10)
     table.scale(1, 2)
     
     # Style header
-    for i in range(6):
+    for i in range(5):
         table[(0, i)].set_facecolor('#40466e')
         table[(0, i)].set_text_props(weight='bold', color='white')
     
@@ -338,17 +308,9 @@ def main():
     print("Generating Visualizations...")
     print("="*80)
     
-    # 1. Comprehensive comparison
-    print("\n1. Creating comprehensive comparison...")
+    # 1. Performance by Encode Length
+    print("\n1. Creating performance by encode length...")
     create_comprehensive_comparison(df, save_dir)
-    
-    # 2. Performance table
-    print("\n2. Creating performance table...")
-    create_performance_table(df, save_dir)
-    
-    # 3. Statistical analysis
-    print("\n3. Creating statistical analysis...")
-    create_statistical_analysis(df, save_dir)
     
     # Save raw results
     df.to_csv(os.path.join(save_dir, 'raw_results.csv'), index=False)
